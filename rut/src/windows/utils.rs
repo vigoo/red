@@ -18,13 +18,13 @@ fn get_last_error() -> (DWORD, String) {
             winbase::FORMAT_MESSAGE_FROM_SYSTEM | winbase::FORMAT_MESSAGE_IGNORE_INSERTS,
             ptr::null(),
             code,
-            winnt::MAKELANGID(winnt::LANG_NEUTRAL as u16, winnt::SUBLANG_DEFAULT as u16) as u32,
+            u32::from(winnt::MAKELANGID(winnt::LANG_NEUTRAL as u16, winnt::SUBLANG_DEFAULT as u16)),
             buffer.as_mut_ptr(),
             buffer.len() as DWORD,
             ptr::null_mut()
         );
 
-        let message = OsString::from_wide(&buffer).into_string().unwrap_or("?".to_string());
+        let message = OsString::from_wide(&buffer).into_string().unwrap_or_else(|_| "?".to_string());
 
         (code, message)
     }
@@ -60,7 +60,7 @@ pub fn get_control_key_states(flags: DWORD) -> ControlKeyStates {
 pub fn get_key(event: &wincon::KEY_EVENT_RECORD) -> Option<Key> {
     use winapi::um::winuser::*;
 
-    match event.wVirtualKeyCode as i32 {
+    match i32::from(event.wVirtualKeyCode) {
         VK_BACK => Some(Key::Backspace),
         VK_TAB => Some(Key::Tab),
         VK_RETURN => Some(Key::Enter),
@@ -134,7 +134,7 @@ pub fn get_key(event: &wincon::KEY_EVENT_RECORD) -> Option<Key> {
                     .into_string()
                     .ok()
                     .and_then(|s| s.chars().next())
-                    .map(|ch| Key::CharKey(ch))
+                    .map(Key::CharKey)
             }
         }
     }

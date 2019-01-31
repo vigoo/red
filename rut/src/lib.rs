@@ -62,8 +62,8 @@ pub struct ControlKeyStates {
 }
 
 impl ControlKeyStates {
-    pub fn alt(&self) -> bool { self.left_alt || self.right_alt }
-    pub fn ctrl(&self) -> bool { self.left_ctrl || self.right_ctrl }
+    pub fn alt(self) -> bool { self.left_alt || self.right_alt }
+    pub fn ctrl(self) -> bool { self.left_ctrl || self.right_ctrl }
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -166,18 +166,18 @@ impl<'a> Frame for Box<Region + 'a> {
         let width = self.width();
         let height = self.height();
         let horizontal: String = vec![chars[FrameCharacter::Horizontal as usize]; width as usize].iter().collect();
-        let _ = self.print(0, 0, background, foreground, &horizontal)?;
-        let _ = self.print(0, height - 1, background, foreground, &horizontal)?;
+        self.print(0, 0, background, foreground, &horizontal)?;
+        self.print(0, height - 1, background, foreground, &horizontal)?;
 
         for y in 1..(height - 1) {
-            let _ = self.print_char(0, y, background, foreground, chars[FrameCharacter::Vertical as usize])?;
-            let _ = self.print_char(width - 1, y, background, foreground, chars[FrameCharacter::Vertical as usize])?;
+            self.print_char(0, y, background, foreground, chars[FrameCharacter::Vertical as usize])?;
+            self.print_char(width - 1, y, background, foreground, chars[FrameCharacter::Vertical as usize])?;
         }
 
-        let _ = self.print_char(0, 0, background, foreground, chars[FrameCharacter::TopLeft as usize])?;
-        let _ = self.print_char(width - 1, 0, background, foreground, chars[FrameCharacter::TopRight as usize])?;
-        let _ = self.print_char(0, height - 1, background, foreground, chars[FrameCharacter::BottomLeft as usize])?;
-        let _ = self.print_char(width - 1, height - 1, background, foreground, chars[FrameCharacter::BottomRight as usize])?;
+        self.print_char(0, 0, background, foreground, chars[FrameCharacter::TopLeft as usize])?;
+        self.print_char(width - 1, 0, background, foreground, chars[FrameCharacter::TopRight as usize])?;
+        self.print_char(0, height - 1, background, foreground, chars[FrameCharacter::BottomLeft as usize])?;
+        self.print_char(width - 1, height - 1, background, foreground, chars[FrameCharacter::BottomRight as usize])?;
 
         Ok(())
     }

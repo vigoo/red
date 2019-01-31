@@ -31,7 +31,7 @@ impl<'a> Region for UnixRegion<'a> {
         let row: String = vec!['.'; self.width as usize].iter().collect();
 
         for y in 0..self.height {
-            let _ = self.print(0, y, color, self.console.current_foreground, &row)?;
+            self.print(0, y, color, self.console.current_foreground, &row)?;
         }
 
         let s = format!("{} {}", self.width, self.height);
@@ -41,12 +41,12 @@ impl<'a> Region for UnixRegion<'a> {
     }
 
     fn print(&mut self, rel_x: i16, rel_y: i16, background: Color, foreground: Color, text: &str) -> Result<()> {
-        let _ = self.console.set_attributes(background, foreground)?;
+        self.console.set_attributes(background, foreground)?;
 
         let mut x = self.left + rel_x;
         let mut y = self.top + rel_y;
         for ch in text.chars() {
-            let _ = self.console.write_char(x, y, ch)?;
+            self.console.write_char(x, y, ch)?;
 
             if x == (self.left + self.width - 1) {
                 x = self.left;
@@ -87,12 +87,12 @@ pub struct UnixConsole {
 impl UnixConsole {
     fn write_char(&mut self, x: i16, y: i16, ch: char) -> Result<()> {
         if (self.x != (x - 1)) || (self.y != y) {
-            let _ = self.move_cursor(x, y)?;
+            self.move_cursor(x, y)?;
         }
 
         let mut buf = [0; 8];
         ch.encode_utf8(&mut buf);
-        let _ = guarded_io("write", || self.tty.write(&buf))?;
+        guarded_io("write", || self.tty.write(&buf))?;
         if self.x == (self.width - 1) {
             self.x = 0;
             self.y = self.y + 1;
@@ -104,7 +104,7 @@ impl UnixConsole {
     }
 
     fn move_cursor(&mut self, x: i16, y: i16) -> Result<()> {
-        let _ = guarded_io("write_fmt", || self.tty.write_fmt(format_args!("\x1b[{};{}H", y+1, x+1)))?;
+        guarded_io("write_fmt", || self.tty.write_fmt(format_args!("\x1b[{};{}H", y+1, x+1)))?;
         self.x = x;
         self.y = y;
         Ok(())
@@ -112,7 +112,7 @@ impl UnixConsole {
 
     fn set_attributes(&mut self, background: Color, foreground: Color) -> Result<()> {
         if (self.current_background != background) || (self.current_foreground != foreground) {
-            let _ = guarded_io(
+            guarded_io(
                 "write_fmt",
                 || self.tty.write_fmt(format_args!("\x1b[{};{}m", fg_color_code(foreground), bg_color_code(background))))?;
 
@@ -160,8 +160,8 @@ pub fn create_console() -> Result<UnixConsole> {
         current_background: Color::White
     };
 
-    let _ = console.move_cursor(0, 0)?;
-    let _ = console.set_attributes(Color::Black, Color::LightGray)?;
+    console.move_cursor(0, 0)?;
+    console.set_attributes(Color::Black, Color::LightGray)?;
 
     Ok(console)
 }
@@ -169,7 +169,7 @@ pub fn create_console() -> Result<UnixConsole> {
 #[cfg(not(target_os = "windows"))]
 impl Console for UnixConsole {
     fn clear(&mut self) -> Result<()> {
-        let _ = guarded_io("write", || self.tty.write(self.function_sequences.clear_screen.as_bytes()))?;
+        guarded_io("write", || self.tty.write(self.function_sequences.clear_screen.as_bytes()))?;
         Ok(())
     }
 

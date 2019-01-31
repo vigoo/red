@@ -52,16 +52,6 @@ impl Region for WindowsRegion {
         self.right - self.left
     }
 
-    fn sub_region(&mut self, rel_x: i16, rel_y: i16, width: i16, height: i16) -> Result<Box<dyn Region>> {
-        Ok(Box::new(WindowsRegion {
-            top: self.top + rel_y,
-            left: self.left + rel_x,
-            bottom: self.top + rel_y + height,
-            right: self.left + rel_x + width,
-            out_handle: self.out_handle
-        }))
-    }
-
     fn fill(&mut self, color: Color) -> Result<()> {
 
         let height = self.height();
@@ -72,7 +62,7 @@ impl Region for WindowsRegion {
                 Y: self.top + row
             };
 
-            let _ = guarded_call("FillConsoleOutputCharacter", || unsafe {
+            guarded_call("FillConsoleOutputCharacter", || unsafe {
                 let mut filled = 0;
                 let r = wincon::FillConsoleOutputCharacterA(
                     self.out_handle,
@@ -83,7 +73,7 @@ impl Region for WindowsRegion {
                 (r, filled)
             })?;
 
-            let _ = guarded_call("FillConsoleOutputAttribute", || unsafe {
+            guarded_call("FillConsoleOutputAttribute", || unsafe {
                 let mut filled = 0;
                 let r = wincon::FillConsoleOutputAttribute(
                     self.out_handle,
@@ -104,7 +94,7 @@ impl Region for WindowsRegion {
         let text_u16: Vec<u16> = OsStr::new(text).encode_wide().collect();
         let attrs = vec![color_to_background_attributes(background) | color_to_foreground_attributes(foreground); text_u16.len()];
 
-        let _ = guarded_call("WriteConsoleOutputCharacter", || unsafe {
+        guarded_call("WriteConsoleOutputCharacter", || unsafe {
             let mut written = 0;
             let r = wincon::WriteConsoleOutputCharacterW(
                 self.out_handle,
@@ -116,7 +106,7 @@ impl Region for WindowsRegion {
             (r, written)
         })?;
 
-        let _ = guarded_call("WriteConsoleOutputAttribute", || unsafe {
+        guarded_call("WriteConsoleOutputAttribute", || unsafe {
             let mut written = 0;
             let r = wincon::WriteConsoleOutputAttribute(
                 self.out_handle,
@@ -129,6 +119,16 @@ impl Region for WindowsRegion {
         })?;
 
         Ok(())
+    }
+
+    fn sub_region(&mut self, rel_x: i16, rel_y: i16, width: i16, height: i16) -> Result<Box<dyn Region>> {
+        Ok(Box::new(WindowsRegion {
+            top: self.top + rel_y,
+            left: self.left + rel_x,
+            bottom: self.top + rel_y + height,
+            right: self.left + rel_x + width,
+            out_handle: self.out_handle
+        }))
     }
 }
 
@@ -199,7 +199,7 @@ impl Console for WindowsConsole {
         let console_size= (screen_buffer_info.dwSize.X) as u32 * (screen_buffer_info.dwSize.Y as u32);
         let coord00 = wincon::COORD { X: 0, Y: 0 };
 
-        let _ = guarded_call("FillConsoleOutputCharacter", || unsafe {
+        guarded_call("FillConsoleOutputCharacter", || unsafe {
             let mut filled = 0;
             let r = wincon::FillConsoleOutputCharacterA(
                 self.out_handle,
@@ -210,7 +210,7 @@ impl Console for WindowsConsole {
             (r, filled)
         })?;
 
-        let _ = guarded_call("FillConsoleOutputAttribute", || unsafe {
+        guarded_call("FillConsoleOutputAttribute", || unsafe {
             let mut filled = 0;
             let r = wincon::FillConsoleOutputAttribute(
                 self.out_handle,
@@ -222,7 +222,7 @@ impl Console for WindowsConsole {
             (r, filled)
         })?;
 
-        let _ = guarded_call("SetConsoleCursorPosition", || unsafe {
+        guarded_call("SetConsoleCursorPosition", || unsafe {
             (wincon::SetConsoleCursorPosition(self.out_handle, coord00), ())
         })?;
 
@@ -270,7 +270,7 @@ impl Console for WindowsConsole {
 
                                         if key_event.wRepeatCount > 1 {
                                             for _ in 1..key_event.wRepeatCount {
-                                                self.event_buffer.push_back(event.clone());
+                                                self.event_buffer.push_back(event);
                                             }
                                         }
 
@@ -350,6 +350,6 @@ impl Console for WindowsConsole {
     }
 
     fn full_screen(&mut self) -> Result<Box<dyn Region>> {
-        Ok(Box::new(self.full_screen_region.clone()))
+        Ok(Box::new(self.full_screen_region))
     }
 }

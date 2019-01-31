@@ -12,6 +12,13 @@ quick_error! {
         SystemCallFailure(call: String, code: u32, message: String) {
             display("System call {} failed with code: [{}] {}", call, code, message)
         }
+        IOFailure(call: String, io_error: std::io::Error) {
+            cause(io_error)
+            display("I/O error when calling {}: {}", call, io_error)
+        }
+        UnsupportedTerminal(details: String) {
+            display("Unsupported terminal: {}", details)
+        }
     }
 }
 
@@ -68,10 +75,10 @@ pub enum Event {
     MouseHorizontalWheel { x: i16, y: i16, amount: i16, control_key_state: ControlKeyStates },
     MouseWheel { x: i16, y: i16, amount: i16, control_key_state: ControlKeyStates },
     MouseMove { x: i16, y: i16, control_key_state: ControlKeyStates },
-    Resize { width: i16, height: i16 }
+    Resize { width: i16, height: i16 },
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialOrd, PartialEq)]
 pub enum Color {
     Black,
     Blue,
@@ -89,7 +96,7 @@ pub enum Color {
     LightRed,
     LightMagenta,
     Yellow,
-    White
+    White,
 }
 
 pub trait Region {
@@ -108,24 +115,27 @@ pub trait Region {
         self.print(rel_x, rel_y, background, foreground, &s)
     }
 
-    fn sub_region(&mut self, rel_x: i16, rel_y: i16, width: i16, height: i16) -> Result<Box<Region>>;
+    fn sub_region<'b>(&'b mut self, rel_x: i16, rel_y: i16, width: i16, height: i16) -> Result<Box<dyn Region + 'b>>;
 }
 
 pub trait Console {
     fn clear(&mut self) -> Result<()>;
     fn get_next_event(&mut self) -> Result<Event>;
 
-    fn full_screen(&mut self) -> Result<Box<dyn Region>>;
+    fn full_screen<'b>(&'b mut self) -> Result<Box<dyn Region + 'b>>;
 }
 
 #[cfg(target_os = "windows")]
 pub use windows::create_console;
 
+#[cfg(not(target_os = "windows"))]
+pub use unix::create_console;
+
 pub enum FrameStyle {
     Single,
     SingleRounded,
     Dashed,
-    Double
+    Double,
 }
 
 enum FrameCharacter {
@@ -134,7 +144,7 @@ enum FrameCharacter {
     TopLeft = 2,
     TopRight = 3,
     BottomLeft = 4,
-    BottomRight = 5
+    BottomRight = 5,
 }
 
 pub fn frame_characters(style: FrameStyle) -> Vec<char> {
@@ -150,24 +160,24 @@ pub trait Frame {
     fn draw_frame(&mut self, background: Color, foreground: Color, style: FrameStyle) -> Result<()>;
 }
 
-impl Frame for Region {
+impl<'a> Frame for Box<Region + 'a> {
     fn draw_frame(&mut self, background: Color, foreground: Color, style: FrameStyle) -> Result<()> {
         let chars = frame_characters(style);
         let width = self.width();
         let height = self.height();
         let horizontal: String = vec![chars[FrameCharacter::Horizontal as usize]; width as usize].iter().collect();
         let _ = self.print(0, 0, background, foreground, &horizontal)?;
-        let _ = self.print(0, height-1, background, foreground, &horizontal)?;
+        let _ = self.print(0, height - 1, background, foreground, &horizontal)?;
 
         for y in 1..(height - 1) {
             let _ = self.print_char(0, y, background, foreground, chars[FrameCharacter::Vertical as usize])?;
-            let _ = self.print_char(width-1, y, background, foreground, chars[FrameCharacter::Vertical as usize])?;
+            let _ = self.print_char(width - 1, y, background, foreground, chars[FrameCharacter::Vertical as usize])?;
         }
 
         let _ = self.print_char(0, 0, background, foreground, chars[FrameCharacter::TopLeft as usize])?;
-        let _ = self.print_char(width-1, 0, background, foreground, chars[FrameCharacter::TopRight as usize])?;
-        let _ = self.print_char(0, height-1, background, foreground, chars[FrameCharacter::BottomLeft as usize])?;
-        let _ = self.print_char(width-1, height-1, background, foreground, chars[FrameCharacter::BottomRight as usize])?;
+        let _ = self.print_char(width - 1, 0, background, foreground, chars[FrameCharacter::TopRight as usize])?;
+        let _ = self.print_char(0, height - 1, background, foreground, chars[FrameCharacter::BottomLeft as usize])?;
+        let _ = self.print_char(width - 1, height - 1, background, foreground, chars[FrameCharacter::BottomRight as usize])?;
 
         Ok(())
     }

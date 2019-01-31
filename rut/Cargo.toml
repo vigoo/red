@@ -12,3 +12,6 @@ quick-error = "1.2.2"
 [target.'cfg(windows)'.dependencies.winapi]
 version = "0.3.6"
 features = ["consoleapi", "errhandlingapi", "handleapi", "minwindef", "processenv", "winbase", "wincon", "winuser"]
+
+[target.'cfg(unix)'.dependencies]
+nix = "0.13.0"

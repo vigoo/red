@@ -43,6 +43,7 @@ impl WindowsRegion {
 }
 
 impl Region for WindowsRegion {
+
     fn height(&self) -> i16 {
         self.bottom - self.top
     }
@@ -51,7 +52,7 @@ impl Region for WindowsRegion {
         self.right - self.left
     }
 
-    fn sub_region(&mut self, rel_x: i16, rel_y: i16, width: i16, height: i16) -> Result<Box<Region>> {
+    fn sub_region(&mut self, rel_x: i16, rel_y: i16, width: i16, height: i16) -> Result<Box<dyn Region>> {
         Ok(Box::new(WindowsRegion {
             top: self.top + rel_y,
             left: self.left + rel_x,
@@ -140,7 +141,7 @@ pub struct WindowsConsole {
     full_screen_region: WindowsRegion
 }
 
-pub fn create_console() -> WindowsConsole {
+pub fn create_console() -> Result<WindowsConsole> {
     let out_handle = unsafe { processenv::GetStdHandle(winbase::STD_OUTPUT_HANDLE) };
     let in_handle = unsafe { processenv::GetStdHandle(winbase::STD_INPUT_HANDLE) };
     let saved_console_in_mode = guarded_call("GetConsoleMode", || unsafe {
@@ -152,7 +153,7 @@ pub fn create_console() -> WindowsConsole {
                      wincon::ENABLE_EXTENDED_FLAGS
         );
         (r, mode)
-    }).unwrap();
+    })?;
 
     let saved_console_out_mode = guarded_call("GetConsoleMode", || unsafe {
         let mut mode = 0;
@@ -162,18 +163,18 @@ pub fn create_console() -> WindowsConsole {
             0
         );
         (r, mode)
-    }).unwrap();
+    })?;
 
-    let full_screen_region = WindowsRegion::from_screen(out_handle).unwrap();
+    let full_screen_region = WindowsRegion::from_screen(out_handle)?;
 
-    WindowsConsole {
+    Ok(WindowsConsole {
         out_handle,
         in_handle,
         saved_console_in_mode,
         saved_console_out_mode,
         event_buffer: VecDeque::new(),
         full_screen_region
-    }
+    })
 }
 
 impl Drop for WindowsConsole {

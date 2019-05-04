@@ -1,52 +1,72 @@
+use crossterm::{Color, Crossterm, InputEvent, KeyEvent, RawScreen, AlternateScreen};
 use rut::*;
+use crate::buffer::*;
+use crate::buffer_view::BufferView;
+use std::time::Duration;
 
-fn redraw<C: Console>(console: &mut C) -> Result<()> {
-    let mut region = console.full_screen()?;
-    region.fill(Color::Green)?;
+mod buffer;
+mod buffer_view;
 
-    region.print(1, 1, Color::Brown, Color::LightRed, "Welcome to RED")?;
+fn render_status_area(console: &mut Crossterm) -> Result<()> {
+    let con_h = console.height();
+    let con_w = console.width();
+    let mut status_region = console.sub_region(0, console.height()-1, console.width(), 1)?;
+    status_region.fill(Color::DarkRed)?;
+    status_region.print(0, 0, Color::DarkRed, Color::White, "*** WELCOME TO R.E.D ***")?;
 
-    {
-        let mut subregion = region.sub_region(10, 10, 10, 10)?;
-        subregion.print(0, 0, Color::Black, Color::White, "hello?")?;
-        subregion.draw_frame(Color::Green, Color::Yellow, FrameStyle::Single)?;
-    }
+    Ok(())
+}
 
-    {
-        let mut subregion = region.sub_region(20, 10, 10, 10)?;
-        subregion.draw_frame(Color::Green, Color::Yellow, FrameStyle::SingleRounded)?;
-    }
+fn render_buffers(console: &mut Crossterm, view: &BufferView) -> Result<()> {
+    let mut buffer_region = console.sub_region(0, 0, console.width(), console.height() - 1)?;
+    buffer_region.fill(Color::Black)?;
+    buffer_region.draw_frame(Color::Black, Color::DarkRed, FrameStyle::Double)?;
 
-    {
-        let mut subregion = region.sub_region(10, 20, 10, 10)?;
-        subregion.draw_frame(Color::Green, Color::Yellow, FrameStyle::Dashed)?;
-    }
+    let mut inner_region = buffer_region.inside()?;
+    let lines_to_show =
+        view.buffer.lines
+            .iter()
+            .skip(view.top_line as usize)
+            .take(inner_region.height() as usize);
 
-    {
-        let mut subregion = region.sub_region(20, 20, 10, 10)?;
-        subregion.draw_frame(Color::Green, Color::Yellow, FrameStyle::Double)?;
+    let mut x = 0;
+    let mut y = 0;
+    for line in lines_to_show {
+        for evt in line.iter() {
+            match evt {
+                BufferRenderEvent::Char(ch) => {
+                    inner_region.print_char(x, y, Color::Black, Color::White, ch)?;
+                    x = x + 1;
+                },
+                BufferRenderEvent::SwitchStyle(style_id) => {},
+            }
+        }
+        y = y + 1;
+        x = 0;
     }
 
     Ok(())
 }
 
-fn playground<C: Console>(console: &mut C) -> Result<()> {
-    console.clear()?;
-    redraw(console)?;
+fn run(console: &mut Crossterm) -> Result<()> {
+    let buf = Buffer::from_string("Hello world\nthis is a test!");
+    let view = BufferView::create(&buf);
+
+    let mut input = console.input().read_sync();
+
+    let mut test_x = 0;
+    let mut test_y = 0;
+    let mut n = 0;
 
     loop {
-        let event = console.get_next_event()?;
-        let s = format!("{:?}", event);
-        {
-            let mut region = console.full_screen()?;
-            region.print(1, region.height() - 1, Color::Black, Color::LightGray, &s)?;
-        }
+        render_buffers(console, &view)?;
+        render_status_area(console)?;
+
+        let event: Option<InputEvent> = input.next();
 
         match event {
-            Event::KeyPressed { key: Key::Escape, .. } => break,
-            Event::Resize { .. } => {
-                redraw(console)?;
-            }
+            Some(InputEvent::Keyboard(KeyEvent::Esc)) =>
+                break,
             _ => {}
         }
     }
@@ -55,8 +75,13 @@ fn playground<C: Console>(console: &mut C) -> Result<()> {
 }
 
 fn main() {
-    let mut console = create_console().unwrap();
-    if let Err(error) = playground(&mut console) {
-        eprintln!("Failed! {}", error)
+    let mut console = Crossterm::new();
+    let _screen = AlternateScreen::to_alternate(true);
+    console.cursor().hide().unwrap();
+
+    if let Err(error) = run(&mut console) {
+        eprintln!("Failure: {}", error)
     }
+
+    console.cursor().show().unwrap();
 }

@@ -1,16 +1,15 @@
+use crossterm::{ClearType, Crossterm, Color};
 use quick_error::*;
-
-#[cfg(target_os = "windows")]
-mod windows;
-
-#[cfg(not(target_os = "windows"))]
-mod unix;
 
 quick_error! {
     #[derive(Debug)]
     pub enum RutError {
         SystemCallFailure(call: String, code: u32, message: String) {
             display("System call {} failed with code: [{}] {}", call, code, message)
+        }
+        CrosstermFailure(cause: crossterm::ErrorKind) {
+            cause(cause)
+            display("Crossterm failure: {}", cause)
         }
         IOFailure(call: String, io_error: std::io::Error) {
             cause(io_error)
@@ -24,112 +23,111 @@ quick_error! {
 
 pub type Result<T> = std::result::Result<T, RutError>;
 
-#[derive(Debug, Copy, Clone)]
-pub enum Key {
-    CharKey(char),
-    Backspace,
-    Tab,
-    Enter,
-    Shift,
-    CapsLock,
-    NumLock,
-    Escape,
-    PageUp,
-    PageDown,
-    Home,
-    End,
-    Delete,
-    Insert,
-    Left,
-    Right,
-    Up,
-    Down,
-    PrintScreen,
-    Function(u8),
-}
-
-#[derive(Debug, Copy, Clone)]
-pub struct ControlKeyStates {
-    capslock: bool,
-    numlock: bool,
-    scrollock: bool,
-
-    shift: bool,
-    left_alt: bool,
-    right_alt: bool,
-    left_ctrl: bool,
-    right_ctrl: bool,
-}
-
-impl ControlKeyStates {
-    pub fn alt(self) -> bool { self.left_alt || self.right_alt }
-    pub fn ctrl(self) -> bool { self.left_ctrl || self.right_ctrl }
-}
-
-#[derive(Debug, Copy, Clone)]
-pub enum Event {
-    KeyPressed { key: Key, control_key_state: ControlKeyStates },
-    KeyReleased { key: Key, control_key_state: ControlKeyStates },
-    MouseButtonStateChange { x: i16, y: i16, left_button: bool, right_button: bool, control_key_state: ControlKeyStates },
-    MouseDoubleClick { x: i16, y: i16, left_button: bool, right_button: bool, control_key_state: ControlKeyStates },
-    MouseHorizontalWheel { x: i16, y: i16, amount: i16, control_key_state: ControlKeyStates },
-    MouseWheel { x: i16, y: i16, amount: i16, control_key_state: ControlKeyStates },
-    MouseMove { x: i16, y: i16, control_key_state: ControlKeyStates },
-    Resize { width: i16, height: i16 },
-}
-
-#[derive(Debug, Copy, Clone, PartialOrd, PartialEq)]
-pub enum Color {
-    Black,
-    Blue,
-    Green,
-    Cyan,
-    Red,
-    Magenta,
-    Brown,
-    LightGray,
-
-    DarkGray,
-    LightBlue,
-    LightGreen,
-    LightCyan,
-    LightRed,
-    LightMagenta,
-    Yellow,
-    White,
-}
-
 pub trait Region {
-    fn height(&self) -> i16;
-    fn width(&self) -> i16;
+    fn height(&self) -> u16;
+    fn width(&self) -> u16;
 
     fn clear(&mut self) -> Result<()> {
         self.fill(Color::Black)
     }
 
     fn fill(&mut self, color: Color) -> Result<()>;
-    fn print(&mut self, rel_x: i16, rel_y: i16, background: Color, foreground: Color, text: &str) -> Result<()>;
+    fn print(&mut self, rel_x: u16, rel_y: u16, background: Color, foreground: Color, text: &str) -> Result<()>;
 
-    fn print_char(&mut self, rel_x: i16, rel_y: i16, background: Color, foreground: Color, char: char) -> Result<()> {
+    fn print_char(&mut self, rel_x: u16, rel_y: u16, background: Color, foreground: Color, char: char) -> Result<()> {
         let s = format!("{}", char);
         self.print(rel_x, rel_y, background, foreground, &s)
     }
 
-    fn sub_region<'b>(&'b mut self, rel_x: i16, rel_y: i16, width: i16, height: i16) -> Result<Box<dyn Region + 'b>>;
+    fn sub_region<'b>(&'b mut self, rel_x: u16, rel_y: u16, width: u16, height: u16) -> Result<Box<dyn Region + 'b>>;
 }
 
-pub trait Console {
-    fn clear(&mut self) -> Result<()>;
-    fn get_next_event(&mut self) -> Result<Event>;
+impl Region for Crossterm {
+    fn height(&self) -> u16 {
+        let (_, h) = self.terminal().terminal_size();
+        h
+    }
 
-    fn full_screen<'b>(&'b mut self) -> Result<Box<dyn Region + 'b>>;
+    fn width(&self) -> u16 {
+        let (w, _) = self.terminal().terminal_size();
+        w
+    }
+
+    fn fill(&mut self, color: Color) -> Result<()> {
+        self.color()
+            .set_bg(color)
+            .map_err(RutError::CrosstermFailure)?;
+        self.terminal()
+            .clear(ClearType::All)
+            .map_err(RutError::CrosstermFailure)
+    }
+
+    fn print(&mut self, rel_x: u16, rel_y: u16, background: Color, foreground: Color, text: &str) -> Result<()> {
+        self.color()
+            .set_bg(background)
+            .map_err(RutError::CrosstermFailure)?;
+        self.color()
+            .set_fg(foreground)
+            .map_err(RutError::CrosstermFailure)?;
+        self.cursor()
+            .goto(rel_x, rel_y)
+            .map_err(RutError::CrosstermFailure)?;
+        self.terminal()
+            .write(text)
+            .map(|_| ())
+            .map_err(RutError::CrosstermFailure)
+    }
+
+    fn sub_region<'b>(&'b mut self, rel_x: u16, rel_y: u16, width: u16, height: u16) -> Result<Box<dyn Region + 'b>> {
+        Ok(Box::new(Subregion {
+            console: self,
+            x: rel_x,
+            y: rel_y,
+            width,
+            height
+        }))
+    }
 }
 
-#[cfg(target_os = "windows")]
-pub use windows::create_console;
+struct Subregion<'a> {
+    console: &'a mut Crossterm,
+    x: u16,
+    y: u16,
+    width: u16,
+    height: u16
+}
 
-#[cfg(not(target_os = "windows"))]
-pub use unix::create_console;
+impl<'a> Region for Subregion<'a> {
+    fn height(&self) -> u16 {
+        self.height
+    }
+
+    fn width(&self) -> u16 {
+        self.width
+    }
+
+    fn fill(&mut self, color: Color) -> Result<()> {
+        let horizontal: String = vec![' '; self.width as usize].iter().collect();
+        for y in 0..self.height {
+            self.print(0, y, color, Color::White, &horizontal)?
+        }
+        Ok(())
+    }
+
+    fn print(&mut self, rel_x: u16, rel_y: u16, background: Color, foreground: Color, text: &str) -> Result<()> {
+        self.console.print(self.x + rel_x, self.y + rel_y, background, foreground, text)
+    }
+
+    fn sub_region<'b>(&'b mut self, rel_x: u16, rel_y: u16, width: u16, height: u16) -> Result<Box<dyn Region + 'b>> {
+        Ok(Box::new(Subregion {
+            console: self.console,
+            x: self.x + rel_x,
+            y: self.y + rel_y,
+            width,
+            height
+        }))
+    }
+}
 
 pub enum FrameStyle {
     Single,
@@ -158,6 +156,7 @@ pub fn frame_characters(style: FrameStyle) -> Vec<char> {
 
 pub trait Frame {
     fn draw_frame(&mut self, background: Color, foreground: Color, style: FrameStyle) -> Result<()>;
+    fn inside<'b>(&'b mut self) -> Result<Box<dyn Region + 'b>>;
 }
 
 impl<'a> Frame for Box<Region + 'a> {
@@ -180,5 +179,9 @@ impl<'a> Frame for Box<Region + 'a> {
         self.print_char(width - 1, height - 1, background, foreground, chars[FrameCharacter::BottomRight as usize])?;
 
         Ok(())
+    }
+
+    fn inside<'b>(&'b mut self) -> Result<Box<dyn Region + 'b>> {
+        self.sub_region(1, 1, self.width()-2, self.height()-2)
     }
 }

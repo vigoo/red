@@ -6,3 +6,4 @@ edition = "2018"
 
 [dependencies]
 rut = { path = "../rut" }
+crossterm = "0.9.3"

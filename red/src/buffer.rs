@@ -104,17 +104,19 @@ pub struct Cursor {
 }
 
 pub struct Buffer {
+    pub name: String,
     pub lines: Vec<Line>,
     pub cursors: Vec<Cursor>
 }
 
 impl Buffer {
-    pub fn from_string(source: &str) -> Buffer {
+    pub fn from_string(name: &str, source: &str) -> Buffer {
         let lines = source
             .split('\n')
             .map(Line::process)
             .collect();
         Buffer {
+            name: name.to_string(),
             lines,
             cursors: vec![]
         }

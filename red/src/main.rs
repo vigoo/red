@@ -1,15 +1,16 @@
-use crossterm::{Color, Crossterm, InputEvent, KeyEvent, RawScreen, AlternateScreen};
+use crossterm::{Color, Crossterm, InputEvent, AlternateScreen};
 use rut::*;
 use crate::buffer::*;
 use crate::buffer_view::BufferView;
-use std::time::Duration;
+use crate::state::State;
+use crate::commands::GlobalAction;
 
 mod buffer;
 mod buffer_view;
+mod commands;
+mod state;
 
 fn render_status_area(console: &mut Crossterm) -> Result<()> {
-    let con_h = console.height();
-    let con_w = console.width();
     let mut status_region = console.sub_region(0, console.height()-1, console.width(), 1)?;
     status_region.fill(Color::DarkRed)?;
     status_region.print(0, 0, Color::DarkRed, Color::White, "*** WELCOME TO R.E.D ***")?;
@@ -38,7 +39,7 @@ fn render_buffers(console: &mut Crossterm, view: &BufferView) -> Result<()> {
                     inner_region.print_char(x, y, Color::Black, Color::White, ch)?;
                     x = x + 1;
                 },
-                BufferRenderEvent::SwitchStyle(style_id) => {},
+                BufferRenderEvent::SwitchStyle(_style_id) => {},
             }
         }
         y = y + 1;
@@ -49,24 +50,26 @@ fn render_buffers(console: &mut Crossterm, view: &BufferView) -> Result<()> {
 }
 
 fn run(console: &mut Crossterm) -> Result<()> {
-    let buf = Buffer::from_string("Hello world\nthis is a test!");
-    let view = BufferView::create(&buf);
+//    let mut buf = Buffer::from_string("test","Hello world\nthis is a test!");
+//    let mut view = BufferView::create(&buf);
+    let mut state = State::initial();
 
     let mut input = console.input().read_sync();
 
-    let mut test_x = 0;
-    let mut test_y = 0;
-    let mut n = 0;
-
     loop {
-        render_buffers(console, &view)?;
+        render_buffers(console, state.active_view)?;
         render_status_area(console)?;
 
         let event: Option<InputEvent> = input.next();
 
         match event {
-            Some(InputEvent::Keyboard(KeyEvent::Esc)) =>
-                break,
+            Some(InputEvent::Keyboard(key_event)) =>
+                match commands::handle_key_event(key_event, &mut state) {
+                    Some(GlobalAction::Quit) =>
+                        break,
+                    None =>
+                        {}
+                }
             _ => {}
         }
     }

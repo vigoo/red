@@ -1,13 +1,20 @@
-use crossterm::{Color, Crossterm, InputEvent, AlternateScreen};
+use crossterm::{Color, Crossterm, AlternateScreen};
 use rut::*;
+use riker::actors::*;
+use riker_patterns::ask::ask;
+use std::sync::{Arc, Mutex};
+
 use crate::buffer::*;
 use crate::buffer_view::BufferView;
+use crate::input::{Input, InputMsg};
 use crate::state::State;
-use crate::commands::GlobalAction;
+use futures::executor::block_on;
+use futures::prelude::future::RemoteHandle;
 
 mod buffer;
 mod buffer_view;
 mod commands;
+mod input;
 mod state;
 
 fn render_status_area(console: &mut Crossterm) -> Result<()> {
@@ -18,15 +25,16 @@ fn render_status_area(console: &mut Crossterm) -> Result<()> {
     Ok(())
 }
 
-fn render_buffers(console: &mut Crossterm, view: &BufferView) -> Result<()> {
+fn render_buffer(console: &mut Crossterm, buffer: &Buffer, view: &BufferView) -> Result<()> {
     let mut buffer_region = console.sub_region(0, 0, console.width(), console.height() - 1)?;
     buffer_region.fill(Color::Black)?;
     buffer_region.draw_frame(Color::Black, Color::DarkRed, FrameStyle::Double)?;
 
     let mut inner_region = buffer_region.inside()?;
     let lines_to_show =
-        view.buffer.lines
+        buffer.lines
             .iter()
+            .skip(view.top_line as usize)
             .skip(view.top_line as usize)
             .take(inner_region.height() as usize);
 
@@ -49,40 +57,30 @@ fn render_buffers(console: &mut Crossterm, view: &BufferView) -> Result<()> {
     Ok(())
 }
 
-fn run(console: &mut Crossterm) -> Result<()> {
-//    let mut buf = Buffer::from_string("test","Hello world\nthis is a test!");
-//    let mut view = BufferView::create(&buf);
-    let mut state = State::initial();
+fn run(console: &mut Crossterm, system: &ActorSystem) -> Result<()> {
+    let state = system.actor_of(State::props(), "state").unwrap();
+    let input_reader = console.input().read_async();
+    let input = system.actor_of(Input::props(state.clone(), Arc::new(Mutex::new(input_reader))), "input").unwrap();
 
-    let mut input = console.input().read_sync();
-
-    loop {
-        render_buffers(console, state.active_view)?;
-        render_status_area(console)?;
-
-        let event: Option<InputEvent> = input.next();
-
-        match event {
-            Some(InputEvent::Keyboard(key_event)) =>
-                match commands::handle_key_event(key_event, &mut state) {
-                    Some(GlobalAction::Quit) =>
-                        break,
-                    None =>
-                        {}
-                }
-            _ => {}
-        }
-    }
+    let handle: RemoteHandle<bool> = ask(system, &input, InputMsg::AskForQuit);
+    let result = block_on(handle);
+//
+//    loop {
+////        render_buffers(console, active_buffer, active_view)?;
+//        render_status_area(console)?;
+//
+//    }
 
     Ok(())
 }
 
 fn main() {
+    let system = ActorSystem::new().unwrap();
     let mut console = Crossterm::new();
     let _screen = AlternateScreen::to_alternate(true);
     console.cursor().hide().unwrap();
 
-    if let Err(error) = run(&mut console) {
+    if let Err(error) = run(&mut console, &system) {
         eprintln!("Failure: {}", error)
     }
 

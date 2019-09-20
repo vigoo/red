@@ -1,37 +1,76 @@
+use crate::buffer::{Buffer, BufferName, BufferViewName};
 use crate::buffer_view::BufferView;
 use std::collections::HashMap;
-use crate::buffer::Buffer;
+use riker::actors::*;
 
-pub struct State<'a> {
-    pub active_view: &'a mut BufferView<'a>,
-    buffers: HashMap<String, Buffer>,
-    views: HashMap<String, BufferView<'a>>
+pub struct State {
+    active_view: BufferViewName,
+    buffers: HashMap<BufferName, Buffer>,
+    views: HashMap<BufferViewName, BufferView>
 }
 
-impl<'a> State<'a> {
-    pub fn initial() -> State<'a> {
-        let default_name = "default";
-        let default_buffer = Buffer::from_string(default_name, "");
-        let mut default_buffer_view = BufferView::create(&default_buffer);
+#[derive(Clone, Debug)]
+pub enum StateMessage {
+    InsertChar(char)
+}
 
-        let mut initial_buffers: HashMap<String, Buffer> = HashMap::new();
-        initial_buffers.insert(default_name.to_string(), default_buffer);
+impl State {
+    pub fn props() -> BoxActorProd<State> {
+        Props::new(State::initial)
+    }
 
-        let mut initial_views: HashMap<String, BufferView<'a>> = HashMap::new();
-        initial_views.insert(default_name.to_string(), default_buffer_view);
+    fn initial() -> State {
+        let default_name = BufferName::new("default");
+        let default_view_name = BufferViewName::new("default");
+        let default_buffer = Buffer::from_string(&default_name, "");
+        let default_buffer_view = BufferView::create(default_name.clone());
+
+        let mut initial_buffers: HashMap<BufferName, Buffer> = HashMap::new();
+        initial_buffers.insert(default_name.clone(), default_buffer);
+
+        let mut initial_views: HashMap<BufferViewName, BufferView> = HashMap::new();
+        initial_views.insert(default_view_name.clone(), default_buffer_view);
 
         State {
-            active_view: &mut default_buffer_view,
+            active_view: default_view_name,
             buffers: initial_buffers,
             views: initial_views
         }
     }
 
-    pub fn add_buffer(&mut self, new_buffer: Buffer) {
+    fn add_buffer(&mut self, new_buffer: Buffer) {
         self.buffers.insert(new_buffer.name.clone(), new_buffer);
     }
 
-    pub fn borrow_buffer(&mut self, name: &str) -> Option<&mut Buffer> {
-        self.buffers.get_mut(name)
+    fn borrow_active_buffer(&mut self) -> Option<&mut Buffer> {
+        let active_buffer_name: Option<BufferName> = self.views.get(&self.active_view).map(|view| view.buffer.clone());
+        match active_buffer_name {
+            Some(name) => self.buffers.get_mut(&name),
+            None => None
+        }
+    }
+
+    fn insert_char_to_active_buffer(&mut self, ch: char) {
+        self.borrow_active_buffer().map(|buffer|
+            buffer.insert(ch)
+        );
+    }
+//
+//    pub fn borrow_buffer(&mut self, name: &BufferName) -> Option<&mut Rc<Buffer>> {
+//        self.buffers.get_mut(name)
+//    }
+//
+//    pub fn borrow_view(&mut self, name: &BufferName) -> Option<&mut Rc<BufferView>> {
+//        self.views.get_mut(name)
+//    }
+}
+
+impl Actor for State {
+    type Msg = StateMessage;
+
+    fn recv(&mut self, _ctx: &Context<StateMessage>, msg: StateMessage, _sender: Sender) {
+        match msg {
+            StateMessage::InsertChar(ch) => self.insert_char_to_active_buffer(ch)
+        }
     }
 }

@@ -1,6 +1,29 @@
 use crate::buffer::BufferRenderEvent::SwitchStyle;
 use std::str::Chars;
 
+#[derive(Debug, Clone, PartialEq, Hash)]
+pub struct BufferName(String);
+
+impl BufferName {
+    pub fn new(name: &str) -> BufferName {
+        BufferName(name.to_string())
+    }
+}
+
+impl Eq for BufferName {}
+
+#[derive(Debug, Clone, PartialEq, Hash)]
+pub struct BufferViewName(String);
+
+impl BufferViewName {
+    pub fn new(name: &str) -> BufferViewName {
+        BufferViewName(name.to_string())
+    }
+}
+
+impl Eq for BufferViewName {}
+
+
 #[derive(Debug, Clone)]
 pub struct StyleId(String);
 
@@ -104,21 +127,25 @@ pub struct Cursor {
 }
 
 pub struct Buffer {
-    pub name: String,
+    pub name: BufferName,
     pub lines: Vec<Line>,
     pub cursors: Vec<Cursor>
 }
 
 impl Buffer {
-    pub fn from_string(name: &str, source: &str) -> Buffer {
+    pub fn from_string(name: &BufferName, source: &str) -> Buffer {
         let lines = source
             .split('\n')
             .map(Line::process)
             .collect();
         Buffer {
-            name: name.to_string(),
+            name: name.clone(),
             lines,
             cursors: vec![]
         }
+    }
+
+    pub fn insert(&mut self, ch: char) {
+        // TODO
     }
 }

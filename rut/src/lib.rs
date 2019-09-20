@@ -159,7 +159,7 @@ pub trait Frame {
     fn inside<'b>(&'b mut self) -> Result<Box<dyn Region + 'b>>;
 }
 
-impl<'a> Frame for Box<Region + 'a> {
+impl<'a> Frame for Box<dyn Region + 'a> {
     fn draw_frame(&mut self, background: Color, foreground: Color, style: FrameStyle) -> Result<()> {
         let chars = frame_characters(style);
         let width = self.width();

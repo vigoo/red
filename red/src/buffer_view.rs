@@ -1,12 +1,12 @@
-use crate::buffer::Buffer;
+use crate::buffer::BufferName;
 
-pub struct BufferView<'a> {
+pub struct BufferView {
     pub top_line: u32,
-    pub buffer: &'a Buffer
+    pub buffer: BufferName
 }
 
-impl<'a> BufferView<'a> {
-    pub fn create(buffer: &Buffer) -> BufferView {
+impl BufferView {
+    pub fn create(buffer: BufferName) -> BufferView {
         BufferView {
             top_line: 0,
             buffer
